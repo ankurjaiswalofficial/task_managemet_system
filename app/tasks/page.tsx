@@ -20,12 +20,13 @@ import {
 import { Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 import { TaskDialog } from "@/components/task-dialog";
+import { toast } from "@/hooks/use-toast";
 
 type Task = {
   id: string;
   title: string;
   priority: number;
-  status: "Pending" | "Finished";
+  status: "PENDING" | "FINISHED";
   startTime: string;
   endTime: string;
   totalTime: number;
@@ -33,29 +34,40 @@ type Task = {
 };
 
 export default function TasksPage() {
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-  const email = localStorage.getItem("email");
-  const token = localStorage.getItem("token");
 
   const fetchTasks = async () => {
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch("/api/tasks", {headers: { Authorization: `Bearer ${token}` }, method: "GET", body: JSON.stringify({ email, token })});
-      if (!res.ok) throw new Error("Failed to fetch tasks");
+      const res = await fetch("/api/tasks", {
+        headers: { Authorization: `Bearer ${token}` },
+        method: "GET",
+      });
+      
+      if (!res.ok) {
+        throw new Error("Failed to fetch tasks");
+      }
+      
       const data = await res.json();
       const tasksWithSelection = data.map((task: Task) => ({ ...task, selected: false }));
+      setAllTasks(tasksWithSelection);
       setTasks(tasksWithSelection);
     } catch (error) {
       console.error(error);
+      toast({
+        title: "Error",
+        description: "Unable to fetch tasks",
+        variant: "destructive",
+      });
     }
   };
 
   useEffect(() => {
     fetchTasks();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggleTaskSelection = (id: string) => {
@@ -66,19 +78,122 @@ export default function TasksPage() {
     );
   };
 
-  const handleDeleteSelected = async () => {
-    const selectedIds = tasks.filter((task) => task.selected).map((task) => task.id);
-    if (selectedIds.length === 0) return; 
+  const handleCreateTask = async (taskData: Partial<Task>) => {
     try {
+      const token = localStorage.getItem("token");
       const res = await fetch("/api/tasks", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: selectedIds, email, token }),
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: taskData.title,
+          priority: taskData.priority,
+          status: taskData.status,
+          startTime: taskData.startTime,
+          endTime: taskData.endTime,
+        }),
       });
-      if (!res.ok) throw new Error("Failed to delete tasks");
-      setTasks((prevTasks) => prevTasks.filter((task) => !selectedIds.includes(task.id)));
+
+      if (!res.ok) {
+        throw new Error("Failed to create task");
+      }
+
+      const newTask = await res.json();
+      setTasks((prevTasks) => [...prevTasks, { ...newTask, selected: false }]);
+      
+      toast({
+        title: "Success",
+        description: "Task created successfully",
+      });
     } catch (error) {
       console.error(error);
+      toast({
+        title: "Error",
+        description: "Unable to create task",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUpdateTask = async (taskData: Task) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/tasks", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          id: taskData.id,
+          title: taskData.title,
+          priority: taskData.priority,
+          status: taskData.status,
+          startTime: taskData.startTime,
+          endTime: taskData.endTime,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to update task");
+      }
+
+      const updatedTask = await res.json();
+      setTasks((prevTasks) =>
+        prevTasks.map((task) => 
+          task.id === updatedTask.id ? { ...updatedTask, selected: task.selected } : task
+        )
+      );
+      
+      toast({
+        title: "Success",
+        description: "Task updated successfully",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Error",
+        description: "Unable to update task",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    const selectedIds = tasks.filter((task) => task.selected).map((task) => task.id);
+    
+    if (selectedIds.length === 0) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/tasks", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to delete tasks");
+      }
+
+      setTasks((prevTasks) => prevTasks.filter((task) => !selectedIds.includes(task.id)));
+      
+      toast({
+        title: "Success",
+        description: `${selectedIds.length} task(s) deleted successfully`,
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Error",
+        description: "Unable to delete tasks",
+        variant: "destructive",
+      });
     }
   };
 
@@ -90,6 +205,15 @@ export default function TasksPage() {
     });
     setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     setTasks(sortedTasks);
+  };
+
+  const handleDialogSubmit = (taskData: Partial<Task>) => {
+    if (selectedTask) {
+      handleUpdateTask({ ...selectedTask, ...taskData });
+    } else {
+      handleCreateTask(taskData);
+    }
+    setIsDialogOpen(false);
   };
 
   return (
@@ -116,7 +240,7 @@ export default function TasksPage() {
                   <DropdownMenuItem
                     key={priority}
                     onClick={() =>
-                      setTasks(tasks.filter((task) => task.priority === priority))
+                      setTasks(allTasks.filter((task) => task.priority === priority))
                     }
                   >
                     Priority {priority}
@@ -132,14 +256,14 @@ export default function TasksPage() {
               <DropdownMenuContent>
                 <DropdownMenuItem
                   onClick={() =>
-                    setTasks(tasks.filter((task) => task.status === "Pending"))
+                    setTasks(allTasks.filter((task) => task.status === "PENDING"))
                   }
                 >
                   Pending
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() =>
-                    setTasks(tasks.filter((task) => task.status === "Finished"))
+                    setTasks(allTasks.filter((task) => task.status === "FINISHED"))
                   }
                 >
                   Finished
@@ -225,9 +349,12 @@ export default function TasksPage() {
       <TaskDialog
         task={selectedTask}
         open={isDialogOpen}
+        onSubmit={handleDialogSubmit}
         onOpenChange={(open) => {
           setIsDialogOpen(open);
-          if (!open) fetchTasks();
+          if (!open) {
+            setSelectedTask(null);
+          }
         }}
       />
     </Layout>

@@ -4,7 +4,7 @@ import { getUserFromToken } from '@/lib/auth';
 import { TaskStatus } from '@prisma/client';
 import { TaskSummary } from '@/lib/types';
 
-export async function GET(req: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
     const user = await getUserFromToken(req);
     

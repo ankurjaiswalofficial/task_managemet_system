@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Layout } from "@/components/page-layout";
@@ -17,7 +16,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TaskSummary, TaskDetail } from "@/lib/types";
+import { TaskSummary, } from "@/lib/types";
+import { Task } from "@prisma/client";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -29,12 +29,11 @@ export default function DashboardPage() {
     pendingTasks: 0,
     avgCompletionTime: "0 hrs",
   });
-  const [taskDetails, setTaskDetails] = useState<TaskDetail[]>([]);
+  const [taskDetails, setTaskDetails] = useState<Task[]>([]);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     const email = localStorage.getItem("email");
-    console.log(token);
     if (!token) {
       router.push("/");
       return;
@@ -49,8 +48,12 @@ export default function DashboardPage() {
       .then((data) =>
         setSummary({
           totalTasks: data.totalTasks,
-          completedTasks: parseInt(((data.completedTasks / data.totalTasks) * 100).toFixed(2)),
-          pendingTasks: parseInt(((data.pendingTasks / data.totalTasks) * 100).toFixed(2)),
+          completedTasks: parseInt(
+            ((data.completedTasks / data.totalTasks) * 100).toFixed(2)
+          ),
+          pendingTasks: parseInt(
+            ((data.pendingTasks / data.totalTasks) * 100).toFixed(2)
+          ),
           avgCompletionTime: `${data.avgCompletionTime} hrs`,
         })
       )
@@ -58,16 +61,38 @@ export default function DashboardPage() {
 
     fetch("/api/tasks", {
       headers: { Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ email, token }),
-      method: "POST",
+      method: "GET",
     })
       .then((res) => res.json())
       .then((data) => setTaskDetails(data))
       .catch((err) => console.error(err));
+
     setPass(true);
   }, [router]);
 
   if (!pass) return <p>Loading...</p>;
+
+  // Group tasks by priority
+  const groupedTasks = taskDetails.reduce((acc, task) => {
+    const priority = task.priority;
+    if (!acc[priority]) acc[priority] = { pendingCount: 0, timeLapsed: 0, timeFinished: 0 };
+
+    // Calculate time lapsed and time finished
+    const startTime = new Date(task.startTime);
+    const endTime = task.endTime ? new Date(task.endTime) : null;
+
+    if (task.status === "PENDING") {
+      acc[priority].pendingCount++;
+      // Time lapsed for pending tasks (current time - start time)
+      const timeLapsed = (new Date().getTime() - startTime.getTime()) / (1000 * 60 * 60); // in hours
+      acc[priority].timeLapsed += timeLapsed;
+    } else if (task.status === "FINISHED" && endTime) {
+      // Time finished for completed tasks (end time - start time)
+      const timeFinished = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60); // in hours
+      acc[priority].timeFinished += timeFinished;
+    }
+    return acc;
+  }, {} as Record<number, { pendingCount: number; timeLapsed: number; timeFinished: number }>);
 
   return (
     <Layout>
@@ -131,12 +156,12 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {taskDetails.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>{row.priority}</TableCell>
-                    <TableCell>{row.pending}</TableCell>
-                    <TableCell>{row.lapsed}</TableCell>
-                    <TableCell>{row.toFinish}</TableCell>
+                {Object.entries(groupedTasks).map(([priority, { pendingCount, timeLapsed, timeFinished }]) => (
+                  <TableRow key={priority}>
+                    <TableCell>{priority}</TableCell>
+                    <TableCell>{pendingCount}</TableCell>
+                    <TableCell>{timeLapsed.toFixed(2)}</TableCell>
+                    <TableCell>{timeFinished.toFixed(2)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -19,16 +19,16 @@ model User {
 }
 
 model Task {
-  id        Int       @id @default(autoincrement())
+  id        Int        @id @default(autoincrement())
   title     String
   startTime DateTime
-  endTime   DateTime
+  endTime   DateTime?
   priority  Int
   status    TaskStatus @default(PENDING)
-  user      User      @relation(fields: [userId], references: [id])
+  user      User       @relation(fields: [userId], references: [id])
   userId    Int
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 
   @@map("tasks")
 }
