@@ -1,45 +1,58 @@
-import { PrismaClient } from "@prisma/client";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { getUserFromToken } from '@/lib/auth';
+import { TaskStatus } from '@prisma/client';
+import { TaskSummary } from '@/lib/types';
 
-const prisma = new PrismaClient();
-
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const totalTasks = await prisma.task.count();
-    const completedTasks = await prisma.task.count({ where: { status: "FINISHED" } });
-    const pendingTasks = await prisma.task.count({ where: { status: "PENDING" } });
-
-    // Fetch all completed tasks to calculate average completion time
-    const completedTaskDurations = await prisma.task.findMany({
-      where: { status: "FINISHED" },
-      select: { startTime: true, endTime: true },
-    });
-
-    // Calculate average time in hours
-    let avgCompletionTime = null;
-    if (completedTaskDurations.length > 0) {
-      const totalDurationInHours = completedTaskDurations.reduce((acc, task) => {
-        if (task.startTime && task.endTime) {
-          const duration = (task.endTime.getTime() - task.startTime.getTime()) / (1000 * 60 * 60); // Convert milliseconds to hours
-          return acc + duration;
-        }
-        return acc;
-      }, 0);
-
-      avgCompletionTime = totalDurationInHours / completedTaskDurations.length;
+    const user = await getUserFromToken(req);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' }, 
+        { status: 401 }
+      );
     }
 
-    return NextResponse.json(
-      {
-        totalTasks,
-        completedTasks,
-        pendingTasks,
-        avgCompletionTime: avgCompletionTime ? `${avgCompletionTime.toFixed(2)} hrs` : "N/A",
-      },
-      { status: 200 }
+    const tasks = await prisma.task.findMany({
+      where: { userId: user.id }
+    });
+
+    const totalTasks = tasks.length;
+    const completedTasks = tasks.filter(
+      task => task.status === TaskStatus.FINISHED
+    ).length;
+    const pendingTasks = tasks.filter(
+      task => task.status === TaskStatus.PENDING
+    ).length;
+    
+    const finishedTasks = tasks.filter(
+      task => task.status === TaskStatus.FINISHED
     );
+    
+    const avgCompletionTime = finishedTasks.length 
+      ? finishedTasks.reduce((acc, task) => {
+          const duration = task.endTime 
+            ? (task.endTime.getTime() - task.startTime.getTime()) / (1000 * 60 * 60)
+            : 0;
+          return acc + duration;
+        }, 0) / finishedTasks.length
+      : 0;
+
+    const summary: TaskSummary = {
+      totalTasks,
+      completedTasks,
+      pendingTasks,
+      avgCompletionTime: avgCompletionTime.toFixed(2)
+    };
+
+    return NextResponse.json(summary);
   } catch (error) {
-    console.error("Error fetching summary:", error);
-    return NextResponse.json({ error: "Failed to fetch summary" }, { status: 500 });
+    console.error('Summary error:', error);
+    return NextResponse.json(
+      { error: 'Something went wrong' }, 
+      { status: 500 }
+    );
   }
 }

@@ -1,59 +1,55 @@
-import { SignJWT, jwtVerify } from "jose";
-import { cookies } from "next/headers";
-import { NextRequest } from "next/server";
-import { prisma } from "./prisma";
-import bcrypt from "bcryptjs";
-import { LoginInput } from "./validations/auth";
+import { NextRequest } from 'next/server';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import { prisma } from './prisma';
 
-const secret = new TextEncoder().encode(process.env.JWT_SECRET ?? "your-secret-key");
-
-export async function encrypt(password: string) {
-  return await bcrypt.hash(password, 10);
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 10);
 }
 
-export async function compare(password: string, hash: string) {
-  return await bcrypt.compare(password, hash);
+export async function comparePasswords(
+  plainPassword: string, 
+  hashedPassword: string
+): Promise<boolean> {
+  return bcrypt.compare(plainPassword, hashedPassword);
 }
 
-export async function createToken(email: string, userId: number) {
-  return await new SignJWT({ email, userId })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("24h")
-    .sign(secret);
+export function generateToken(userId: number, email: string): string {
+  const SECRET_KEY = process.env.JWT_SECRET ?? 'my_secret_key';
+  return jwt.sign(
+    { id: userId, email }, 
+    SECRET_KEY, 
+    { expiresIn: '24h' }
+  );
 }
 
-export async function verifyToken(token: string) {
+export async function validateToken(token: string): Promise<{ id: number, email: string } | null> {
   try {
-    const verified = await jwtVerify(token, secret);
-    return verified.payload as { email: string; userId: number };
-  } catch (err) {
+    const SECRET_KEY = process.env.JWT_SECRET ?? 'your_default_secret_key';
+    return jwt.verify(token, SECRET_KEY) as { id: number, email: string };
+  } catch {
     return null;
   }
 }
 
-export async function getSession() {
-  const token = cookies().get("token")?.value;
-  if (!token) return null;
-  return await verifyToken(token);
-}
-
-export async function validateRequest(req: NextRequest) {
-  const token = req.cookies.get("token")?.value;
-  if (!token) return null;
-  return await verifyToken(token);
-}
-
-export async function login(data: LoginInput) {
-  const user = await prisma.user.findUnique({
-    where: { email: data.email },
-  });
-
-  if (!user) return null;
-  const valid = await compare(data.password, user.password);
-  if (!valid) {
-    return { message: "Invalid password" };
+export async function getUserFromToken(req: NextRequest) {
+  const token = req.cookies.get('token')?.value;
+  
+  if (!token) {
+    return null;
   }
 
-  return user;
+  const decoded = await validateToken(token);
+  
+  if (!decoded) {
+    return null;
+  }
+
+  return prisma.user.findUnique({
+    where: { id: decoded.id },
+    select: { 
+      id: true, 
+      email: true 
+    }
+  });
 }

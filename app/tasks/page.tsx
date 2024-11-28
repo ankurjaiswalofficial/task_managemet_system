@@ -37,34 +37,13 @@ export default function TasksPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  const checkAuth = async () => {
-    try {
-      const res = await fetch("/api/auth/verify", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      });
-
-      if (res.ok) {
-        setIsAuthenticated(true);
-      } else {
-        setIsAuthenticated(false);
-        window.location.href = "/";
-      }
-    } catch (error) {
-      console.error(error);
-      setIsAuthenticated(false);
-      window.location.href = "/";
-    }
-  };
+  const email = localStorage.getItem("email");
+  const token = localStorage.getItem("token");
 
   const fetchTasks = async () => {
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch("/api/tasks", {headers: { Authorization: `Bearer ${token}` },});
+      const res = await fetch("/api/tasks", {headers: { Authorization: `Bearer ${token}` }, method: "GET", body: JSON.stringify({ email, token })});
       if (!res.ok) throw new Error("Failed to fetch tasks");
       const data = await res.json();
       const tasksWithSelection = data.map((task: Task) => ({ ...task, selected: false }));
@@ -75,11 +54,9 @@ export default function TasksPage() {
   };
 
   useEffect(() => {
-    checkAuth();
-    if (isAuthenticated) {
-      fetchTasks();
-    }
-  }, [isAuthenticated]);
+    fetchTasks();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const toggleTaskSelection = (id: string) => {
     setTasks((prevTasks) =>
@@ -96,7 +73,7 @@ export default function TasksPage() {
       const res = await fetch("/api/tasks", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: selectedIds }),
+        body: JSON.stringify({ ids: selectedIds, email, token }),
       });
       if (!res.ok) throw new Error("Failed to delete tasks");
       setTasks((prevTasks) => prevTasks.filter((task) => !selectedIds.includes(task.id)));

@@ -27,7 +27,12 @@ export default function LoginPage() {
       }
 
       const { token } = await res.json();
+      
+      document.cookie = `token=${token}; path=/; max-age=${60 * 60 * 24}`;
+      document.cookie = `email=${email}; path=/; max-age=${60 * 60 * 24}`;
       localStorage.setItem("token", token);
+      localStorage.setItem("email", email);
+
       router.push("/dashboard");
     } catch (err) {
       console.error("Login error:", err);

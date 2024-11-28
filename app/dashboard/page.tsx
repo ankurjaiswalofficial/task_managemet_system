@@ -17,13 +17,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Summary, TaskDetail } from "@/lib/types";
+import { TaskSummary, TaskDetail } from "@/lib/types";
 
 export default function DashboardPage() {
   const router = useRouter();
   const [pass, setPass] = useState(false);
 
-  const [summary, setSummary] = useState<Summary>({
+  const [summary, setSummary] = useState<TaskSummary>({
     totalTasks: 0,
     completedTasks: 0,
     pendingTasks: 0,
@@ -33,6 +33,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
+    const email = localStorage.getItem("email");
+    console.log(token);
     if (!token) {
       router.push("/");
       return;
@@ -40,6 +42,8 @@ export default function DashboardPage() {
 
     fetch("/api/summary", {
       headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ email, token }),
+      method: "POST",
     })
       .then((res) => res.json())
       .then((data) =>
@@ -54,6 +58,8 @@ export default function DashboardPage() {
 
     fetch("/api/tasks", {
       headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ email, token }),
+      method: "POST",
     })
       .then((res) => res.json())
       .then((data) => setTaskDetails(data))

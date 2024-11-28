@@ -1,43 +1,65 @@
-import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createToken, login, encrypt } from "@/lib/auth";
-import { loginSchema } from "@/lib/validations/auth";
-import { prisma } from "@/lib/prisma";
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { 
+  comparePasswords, 
+  generateToken,
+  hashPassword 
+} from '@/lib/auth';
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    const body = await request.json();
-    const validatedData = loginSchema.parse(body);
-
-    let user = await login(validatedData);
-    if (user instanceof Error) {
-      return NextResponse.json({ error: user.message }, { status: 400 });
-    }
-    if (!user) {
-      const hashedPassword = await encrypt(validatedData.password);
-      user = await prisma.user.create({
-        data: {
-          email: validatedData.email,
-          password: hashedPassword,
-        },
-      });
-    }
-    if ('message' in user) {
-      return NextResponse.json({ error: user.message }, { status: 404 });
-    }
-    const token = await createToken(user.email, user.id);
-    cookies().set("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24,
+    const { email, password } = await req.json();
+    let user = await prisma.user.findUnique({ 
+      where: { email } 
     });
 
-    return NextResponse.json({ success: true, token });
-  } catch (error) {
-    if (error instanceof Error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+    if (!user) {
+      const hashedPassword = await hashPassword(password);
+
+      user = await prisma.user.create({
+        data: {
+          email,
+          password: hashedPassword
+        }
+      });
+    } else {
+      const isPasswordValid = await comparePasswords(
+        password, 
+        user.password
+      );
+
+      if (!isPasswordValid) {
+        return NextResponse.json(
+          { error: 'Invalid credentials' }, 
+          { status: 401 }
+        );
+      }
     }
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+
+    const token = generateToken(user.id, user.email);
+
+    const response = NextResponse.json({ 
+      token,
+      user: { 
+        id: user.id, 
+        email: user.email 
+      },
+      isNewUser: !user.id
+    });
+
+    response.cookies.set('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60
+    });
+
+    return response;
+  } catch (error) {
+    console.error('Login/Registration error:', error);
+    return NextResponse.json(
+      { error: 'Something went wrong' }, 
+      { status: 500 }
+    );
   }
 }

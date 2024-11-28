@@ -1,8 +1,9 @@
+import { TaskStatus} from '@prisma/client';
 export interface Task {
     id: string
     title: string
     priority: number
-    status: "Pending" | "Finished"
+    status: "PENDING" | "FINISHED"
     startTime: string
     endTime: string
     totalTime: number
@@ -11,7 +12,7 @@ export interface Task {
 export interface TaskFormData {
     title: string
     priority: number
-    status: "Pending" | "Finished"
+    status: "PENDING" | "FINISHED"
     startTime: string
     endTime: string
 }
@@ -25,10 +26,22 @@ export interface TaskDetail {
   }
   
 
-export interface Summary {
-    totalTasks: number;
-    completedTasks: number;
-    pendingTasks: number;
-    avgCompletionTime: string;
-  }
-  
+export interface CreateTaskInput {
+  title: string;
+  priority?: number;
+  status?: TaskStatus;
+}
+
+export interface UpdateTaskInput {
+  id: number;
+  title?: string;
+  priority?: number;
+  status?: TaskStatus;
+}
+
+export interface TaskSummary {
+  totalTasks: number;
+  completedTasks: number;
+  pendingTasks: number;
+  avgCompletionTime: string;
+}
