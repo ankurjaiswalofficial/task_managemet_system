@@ -45,17 +45,19 @@ export default function DashboardPage() {
       method: "POST",
     })
       .then((res) => res.json())
-      .then((data) =>
+      .then((data) =>{
+        const completedTasks= parseInt(
+          ((data.completedTasks / data.totalTasks) * 100).toFixed(2)
+        )
+        const pendingTasks = parseInt(
+          ((data.pendingTasks / data.totalTasks) * 100).toFixed(2)
+        )
         setSummary({
           totalTasks: data.totalTasks,
-          completedTasks: parseInt(
-            ((data.completedTasks / data.totalTasks) * 100).toFixed(2)
-          ),
-          pendingTasks: parseInt(
-            ((data.pendingTasks / data.totalTasks) * 100).toFixed(2)
-          ),
+          completedTasks: isNaN(completedTasks) ? 0 : completedTasks,
+          pendingTasks: isNaN(pendingTasks) ? 0 : pendingTasks,
           avgCompletionTime: `${data.avgCompletionTime} hrs`,
-        })
+        })}
       )
       .catch((err) => console.error(err));
 
